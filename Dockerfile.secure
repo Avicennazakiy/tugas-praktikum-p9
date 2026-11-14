@@ -1,0 +1,53 @@
+# STAGE 1: Builder - instal dependency
+FROM python:3.14-alpine AS builder
+# Menentukan direktori kerja
+WORKDIR /build
+
+# Menyalin file dependency saja
+COPY requirements.txt .
+
+# Instal dependency tanpa menyimpan cache
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+
+# STAGE 2: Runtime - image final
+FROM python:3.14-alpine AS runtime
+
+# Membuat user non-root
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S -D -h /home/appuser \
+    appuser -G appgroup
+
+# Menentukan direktori kerja
+WORKDIR /app
+
+# Membuat direktori database dan memberikan hak akses
+RUN mkdir -p /app/instance && \
+    chown -R appuser:appgroup /app /home/appuser
+
+# Menyalin dependency dari builder
+COPY --from=builder --chown=appuser:appgroup \
+    /root/.local /home/appuser/.local
+
+# Menghapus pip karena tidak dibutuhkan saat runtime
+RUN python3 -m pip uninstall -y pip
+
+# Menyalin source code aplikasi saja
+COPY --chown=appuser:appgroup app/ ./app/
+COPY --chown=appuser:appgroup run.py .
+
+# Mengatur lokasi home user dan PATH
+ENV HOME=/home/appuser
+ENV PATH="/home/appuser/.local/bin:${PATH}"
+ENV DATABASE_PATH=/app/instance/lms.db
+
+# Menjalankan aplikasi sebagai non-root
+USER appuser
+
+# Port aplikasi Flask
+EXPOSE 5000
+
+# Menjalankan Python
+ENTRYPOINT ["python3"]
+CMD ["run.py"]
+
