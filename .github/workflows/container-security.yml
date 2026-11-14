@@ -1,0 +1,45 @@
+name: Container Security Scan
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-scan:
+    name: Docker Build and Trivy Scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      # 1. Mengambil source code repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Membangun Docker image
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -f Dockerfile.secure \
+            -t apps-secure:${{ github.sha }} .
+
+      # 3. Memindai image dengan Trivy
+      - name: Trivy Vulnerability Scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: apps-secure:${{ github.sha }}
+          format: table
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          scanners: vuln
+          exit-code: '1'
